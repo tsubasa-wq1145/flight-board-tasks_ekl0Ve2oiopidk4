@@ -89,7 +89,7 @@
   /* Column header */
   .col-head {
     display: grid;
-    grid-template-columns: 1.4fr 2.2fr 1.1fr 1.1fr 0.7fr 1.6fr 0.9fr;
+    grid-template-columns: 1.4fr 2.4fr 1.3fr 1.3fr 0.7fr 0.9fr;
     gap: 4px;
     padding: 10px 18px;
     background: #000;
@@ -105,7 +105,7 @@
 
   .row {
     display: grid;
-    grid-template-columns: 1.4fr 2.2fr 1.1fr 1.1fr 0.7fr 1.6fr 0.9fr;
+    grid-template-columns: 1.4fr 2.4fr 1.3fr 1.3fr 0.7fr 0.9fr;
     gap: 4px;
     padding: 12px 18px;
     align-items: center;
@@ -315,12 +315,12 @@
   .submit-btn:active { transform: translateY(2px); box-shadow:0 2px 0 var(--amber-dim); }
 
   @media (max-width: 720px) {
-    .col-head, .row { grid-template-columns: 1fr 1.6fr 0.9fr 0.9fr 0.5fr; font-size: 10px; }
-    .col-head span:nth-child(6), .col-head span:nth-child(7),
-    .row > *:nth-child(6), .row > *:nth-child(7) { display:none; }
-    .flap { font-size: 12px; padding: 5px 5px; }
+    .col-head, .row { grid-template-columns: 1.1fr 1.6fr 1.1fr 1.1fr 0.5fr 0.7fr; font-size: 10px; }
+    .flap { font-size: 11px; padding: 5px 4px; }
     .board-header .title-jp { display:none; }
     .row2 { grid-template-columns: 1fr; }
+    .actions-cell { gap: 3px; }
+    .icon-btn { width: 22px; height: 22px; font-size: 11px; }
   }
 </style>
 </head>
@@ -338,7 +338,6 @@
       <span>開始<small>DEPART</small></span>
       <span>期限<small>ARRIVE</small></span>
       <span>優先<small>GATE</small></span>
-      <span>備考<small>REMARKS</small></span>
       <span></span>
     </div>
     <div class="rows" id="rows"></div>
@@ -385,10 +384,6 @@
             <input type="radio" name="prio" id="p2" value="2" checked><label for="p2">2 中</label>
             <input type="radio" name="prio" id="p3" value="3"><label for="p3">3 高</label>
           </div>
-        </div>
-        <div class="field">
-          <label>備考 / REMARKS</label>
-          <textarea id="f-note" placeholder="メモ・状況など" maxlength="60"></textarea>
         </div>
         <button class="submit-btn" onclick="saveTask()">登録</button>
       </div>
@@ -449,17 +444,14 @@
     rows.innerHTML = list.map(t => {
       const overdue = !t.done && t.end && new Date(t.end).getTime() < Date.now();
       const catClass = t.cat === '仕事' ? 'cat-work' : (t.cat === 'プライベート' ? 'cat-private' : '');
-      const remarks = overdue
-        ? `<div class="flap delayed">DELAYED 遅延</div>`
-        : `<div class="flap">${esc(t.note||'')}</div>`;
+      const endClass = overdue ? 'flap delayed' : 'flap';
       return `
       <div class="row ${t.done ? 'done':''}">
         <div class="flap cat ${catClass}">${esc(t.cat)}</div>
         <div class="flap dest">${esc(t.name)}</div>
         <div class="flap">${fmt(t.start)}</div>
-        <div class="flap">${fmt(t.end)}</div>
+        <div class="${endClass}">${fmt(t.end)}</div>
         <div class="gate p${t.prio}">${t.prio}</div>
-        ${remarks}
         <div class="actions-cell">
           <button class="icon-btn done-btn" title="完了" onclick="toggleDoneTask('${t.id}')">${t.done?'↺':'✓'}</button>
           <button class="icon-btn" title="編集" onclick="editTask('${t.id}')">✎</button>
@@ -494,7 +486,6 @@
     document.getElementById('f-name').value = '';
     document.getElementById('f-start').value = '';
     document.getElementById('f-end').value = '';
-    document.getElementById('f-note').value = '';
     document.getElementById('p2').checked = true;
     document.getElementById('overlay').classList.add('show');
   }
@@ -509,7 +500,6 @@
       start: document.getElementById('f-start').value,
       end: document.getElementById('f-end').value,
       prio: document.querySelector('input[name=prio]:checked').value,
-      note: document.getElementById('f-note').value.trim(),
     };
     if (editId) {
       const t = tasks.find(x=>x.id===editId);
@@ -528,7 +518,6 @@
     document.getElementById('f-name').value = t.name;
     document.getElementById('f-start').value = t.start || '';
     document.getElementById('f-end').value = t.end || '';
-    document.getElementById('f-note').value = t.note || '';
     document.getElementById('p'+t.prio).checked = true;
     document.getElementById('overlay').classList.add('show');
   }
