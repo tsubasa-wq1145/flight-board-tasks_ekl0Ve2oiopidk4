@@ -2,7 +2,11 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="DEPARTURE">
+<meta name="theme-color" content="#0a0a0c">
 <title>DEPARTURE — Task Board</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DSEG14+Classic:wght@400;700&family=Oswald:wght@300;400;500;600&family=JetBrains+Mono:wght@400;700&display=swap');
@@ -142,6 +146,24 @@
   }
   .flap.dest { color: var(--white); font-weight: 700; text-shadow: 0 0 6px rgba(255,255,255,0.25); }
   .flap.cat { font-family:'Oswald'; font-weight:500; letter-spacing:1px; }
+  /* Category colors — ANA blue / JAL red */
+  .flap.cat-work {
+    background: linear-gradient(180deg, #1b4a8a 0%, #0d2c55 49%, #0a2347 51%, #143a72 100%);
+    color: #fff; text-shadow: 0 0 6px rgba(120,170,255,0.4);
+  }
+  .flap.cat-private {
+    background: linear-gradient(180deg, #b32630 0%, #6e151c 49%, #5c1116 51%, #94202a 100%);
+    color: #fff; text-shadow: 0 0 6px rgba(255,140,140,0.4);
+  }
+
+  /* Delayed / overdue */
+  .flap.delayed {
+    color: var(--red);
+    font-weight: 700;
+    text-shadow: 0 0 8px rgba(224,90,82,0.7);
+    animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0.25; } }
 
   .gate {
     text-align: center;
@@ -424,20 +446,27 @@
       rows.innerHTML = '<div class="empty">NO FLIGHTS SCHEDULED — タスクがありません</div>';
       return;
     }
-    rows.innerHTML = list.map(t => `
+    rows.innerHTML = list.map(t => {
+      const overdue = !t.done && t.end && new Date(t.end).getTime() < Date.now();
+      const catClass = t.cat === '仕事' ? 'cat-work' : (t.cat === 'プライベート' ? 'cat-private' : '');
+      const remarks = overdue
+        ? `<div class="flap delayed">DELAYED 遅延</div>`
+        : `<div class="flap">${esc(t.note||'')}</div>`;
+      return `
       <div class="row ${t.done ? 'done':''}">
-        <div class="flap cat">${esc(t.cat)}</div>
+        <div class="flap cat ${catClass}">${esc(t.cat)}</div>
         <div class="flap dest">${esc(t.name)}</div>
         <div class="flap">${fmt(t.start)}</div>
         <div class="flap">${fmt(t.end)}</div>
         <div class="gate p${t.prio}">${t.prio}</div>
-        <div class="flap">${esc(t.note||'')}</div>
+        ${remarks}
         <div class="actions-cell">
           <button class="icon-btn done-btn" title="完了" onclick="toggleDoneTask('${t.id}')">${t.done?'↺':'✓'}</button>
           <button class="icon-btn" title="編集" onclick="editTask('${t.id}')">✎</button>
           <button class="icon-btn" title="削除" onclick="delTask('${t.id}')">🗑</button>
         </div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   }
   function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
@@ -525,6 +554,8 @@
   });
 
   load(); render();
+  // Re-check deadlines periodically so tasks flip to DELAYED on their own
+  setInterval(render, 30000);
 </script>
 </body>
 </html>
