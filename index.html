@@ -345,6 +345,7 @@
 
   <div class="toolbar">
     <button class="btn-primary" onclick="openModal()">＋ タスク入力</button>
+    <button class="toggle-done" id="importBtn" onclick="openImport()">📋 インポート</button>
     <button class="toggle-done" id="toggleDone" onclick="toggleShowDone()">完了タスクを表示</button>
   </div>
 
@@ -386,6 +387,34 @@
           </div>
         </div>
         <button class="submit-btn" onclick="saveTask()">登録</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import Modal -->
+  <div class="overlay" id="importOverlay">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>インポート</h2>
+        <button class="x" onclick="closeImport()">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label>Markdown テーブルを貼り付け</label>
+          <textarea id="imp-text" style="min-height:160px; white-space:pre;" placeholder="| カテゴリ | タスク名 | 開始 | 期限 | 優先 |
+|---|---|---|---|---|
+| 仕事 | 見積書を提出する | 2026-06-10 09:00 | 2026-06-12 17:00 | 3 |
+| プライベート | 歯医者の予約 | 2026-06-11 10:00 | 2026-06-11 10:30 | 中 |"></textarea>
+        </div>
+        <div class="field">
+          <label>取り込み方法</label>
+          <div class="prio-group">
+            <input type="radio" name="impmode" id="im-add" value="add" checked><label for="im-add">追加</label>
+            <input type="radio" name="impmode" id="im-replace" value="replace"><label for="im-replace">全置き換え</label>
+          </div>
+        </div>
+        <div id="imp-msg" style="font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--amber-dim); margin-bottom:12px; white-space:pre-wrap;"></div>
+        <button class="submit-btn" onclick="runImport()">取り込む</button>
       </div>
     </div>
   </div>
@@ -540,6 +569,103 @@
 
   document.getElementById('overlay').addEventListener('click', e=>{
     if (e.target.id==='overlay') closeModal();
+  });
+
+  // ---- import ----
+  function openImport() {
+    document.getElementById('imp-text').value = '';
+    document.getElementById('imp-msg').textContent = '';
+    document.getElementById('im-add').checked = true;
+    document.getElementById('importOverlay').classList.add('show');
+  }
+  function closeImport() { document.getElementById('importOverlay').classList.remove('show'); }
+
+  // 日時 "YYYY-MM-DD HH:MM" → "YYYY-MM-DDTHH:MM"。形式不一致は null（弾く）
+  function parseDateTime(s) {
+    s = (s||'').trim();
+    if (s === '') return { ok:true, value:'' };
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$/);
+    if (!m) return { ok:false };
+    return { ok:true, value:`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}` };
+  }
+  // 優先度: 1/2/3 or 高/中/低、未記入は2
+  function parsePrio(s) {
+    s = (s||'').trim();
+    if (s === '') return '2';
+    if (s === '高' || s === '3') return '3';
+    if (s === '中' || s === '2') return '2';
+    if (s === '低' || s === '1') return '1';
+    return null;
+  }
+
+  function parseMarkdown(text) {
+    const lines = text.split('\n').map(l=>l.trim()).filter(l=>l.startsWith('|'));
+    const parsed = [];
+    const errors = [];
+    let dataRowIndex = 0;
+    lines.forEach((line) => {
+      // セル分割（前後の | を除去）
+      const cells = line.replace(/^\|/,'').replace(/\|$/,'').split('|').map(c=>c.trim());
+      const joined = cells.join('');
+      // 区切り線（|---|---|）はスキップ
+      if (/^[-:\s]*$/.test(joined)) return;
+      // ヘッダー行スキップ（「カテゴリ」「タスク名」を含む行）
+      if (cells[0]==='カテゴリ' && cells[1]==='タスク名') return;
+      dataRowIndex++;
+      if (cells.length < 2 || !cells[1]) {
+        errors.push(`${dataRowIndex}行目: タスク名が空です`);
+        return;
+      }
+      const start = parseDateTime(cells[2]);
+      const end = parseDateTime(cells[3]);
+      const prio = parsePrio(cells[4]);
+      if (!start.ok) { errors.push(`${dataRowIndex}行目「${cells[1]}」: 開始の日時形式が不正（YYYY-MM-DD HH:MM）`); return; }
+      if (!end.ok) { errors.push(`${dataRowIndex}行目「${cells[1]}」: 期限の日時形式が不正（YYYY-MM-DD HH:MM）`); return; }
+      if (prio===null) { errors.push(`${dataRowIndex}行目「${cells[1]}」: 優先度は 1/2/3 か 高/中/低`); return; }
+      parsed.push({
+        cat: cells[0] || '仕事',
+        name: cells[1],
+        start: start.value,
+        end: end.value,
+        prio,
+      });
+    });
+    return { parsed, errors };
+  }
+
+  function runImport() {
+    const text = document.getElementById('imp-text').value;
+    const msg = document.getElementById('imp-msg');
+    if (!text.trim()) { msg.style.color='var(--red)'; msg.textContent='テキストを貼り付けてください'; return; }
+    const { parsed, errors } = parseMarkdown(text);
+    if (parsed.length === 0) {
+      msg.style.color='var(--red)';
+      msg.textContent = '取り込めるタスクがありませんでした\n' + errors.join('\n');
+      return;
+    }
+    const mode = document.querySelector('input[name=impmode]:checked').value;
+    if (mode === 'replace' && !confirm(`現在のタスクをすべて削除して、${parsed.length}件で置き換えます。よろしいですか？`)) return;
+
+    const newTasks = parsed.map(p => ({
+      id: Date.now().toString(36)+Math.random().toString(36).slice(2,5),
+      done:false, ...p
+    }));
+    // 新しいカテゴリがあれば登録
+    parsed.forEach(p => { if (p.cat && !categories.includes(p.cat)) categories.push(p.cat); });
+
+    if (mode === 'replace') tasks = newTasks;
+    else tasks = tasks.concat(newTasks);
+
+    persist(); render();
+    let result = `${parsed.length}件を取り込みました`;
+    if (errors.length) result += `\n（${errors.length}件スキップ）\n` + errors.join('\n');
+    msg.style.color = errors.length ? 'var(--amber)' : 'var(--green)';
+    msg.textContent = result;
+    if (!errors.length) setTimeout(closeImport, 900);
+  }
+
+  document.getElementById('importOverlay').addEventListener('click', e=>{
+    if (e.target.id==='importOverlay') closeImport();
   });
 
   load(); render();
